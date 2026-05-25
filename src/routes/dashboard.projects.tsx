@@ -65,11 +65,14 @@ function ProjectsList() {
 
     let ownerId: string | null = null;
     if (parsed.data.owner_email) {
-      // Find owner by email (look in profiles via auth.users? — only via profiles table). We'll search profiles by joining via user_roles using listed emails -- simplest: look up in auth.users not allowed; use a lookup table approach: ask user to share their account first. Skip silently if not found.
-      const { data: prof } = await supabase.rpc("get_user_id_by_email" as never, { _email: parsed.data.owner_email }).maybeSingle?.() ?? { data: null };
-      ownerId = (prof as { id?: string } | null)?.id ?? null;
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .ilike("full_name", `%${parsed.data.owner_email.split("@")[0]}%`)
+        .maybeSingle();
+      ownerId = prof?.id ?? null;
       if (!ownerId) {
-        toast.warning("Owner email not found — project created without owner. They can be assigned later.");
+        toast.warning("Owner not found by name — project created without owner. An admin can assign later.");
       }
     }
 

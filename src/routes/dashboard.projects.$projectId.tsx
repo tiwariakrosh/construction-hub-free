@@ -166,7 +166,7 @@ function ProjectDetail() {
     queryClient.invalidateQueries({ queryKey: ["phases", projectId] });
   };
 
-  const updatePhase = async (id: string, patch: Record<string, unknown>) => {
+  const updatePhase = async (id: string, patch: { status?: string; progress?: number }) => {
     const { error } = await supabase.from("project_phases").update(patch).eq("id", id);
     if (error) { toast.error(error.message); return; }
     queryClient.invalidateQueries({ queryKey: ["phases", projectId] });

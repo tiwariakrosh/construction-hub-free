@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, FileText, Upload, Calendar, DollarSign, MapPin } from "lucide-react";
+import { ArrowLeft, FileText, Upload, Calendar, DollarSign, MapPin, Plus, Trash2, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -21,6 +21,11 @@ export const Route = createFileRoute("/dashboard/projects/$projectId")({
 const updateSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).optional(),
+});
+
+const phaseSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).optional(),
 });
 
 function ProjectDetail() {
@@ -44,9 +49,23 @@ function ProjectDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("progress_updates")
-        .select("*, author:profiles!progress_updates_author_id_fkey(full_name)")
+        .select("*")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      const ids = Array.from(new Set(data.map((u) => u.author_id)));
+      const { data: profs } = ids.length
+        ? await supabase.from("profiles").select("id, full_name").in("id", ids)
+        : { data: [] as { id: string; full_name: string }[] };
+      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name]));
+      return data.map((u) => ({ ...u, author: { full_name: nameById.get(u.author_id) ?? "Team" } }));
+    },
+  });
+
+  const { data: phases } = useQuery({
+    queryKey: ["phases", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("project_phases").select("*").eq("project_id", projectId).order("order_index");
       if (error) throw error;
       return data;
     },
@@ -62,18 +81,17 @@ function ProjectDetail() {
   });
 
   const canEdit = role === "admin" || (project && user?.id === project.contractor_id);
+  const canComment = role === "admin" || (project && (user?.id === project.contractor_id || user?.id === project.owner_id || user?.id === project.created_by));
 
   const handlePostUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!project || !user) return;
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const parsed = updateSchema.safeParse({ title: fd.get("title"), description: fd.get("description") });
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0].message);
-      return;
-    }
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
 
-    const files = (fd.get("photos") as File | null) ? Array.from((e.currentTarget.elements.namedItem("photos") as HTMLInputElement).files ?? []) : [];
+    const files = Array.from((form.elements.namedItem("photos") as HTMLInputElement).files ?? []);
     const photoUrls: string[] = [];
     for (const file of files) {
       if (file.size === 0) continue;
@@ -99,7 +117,7 @@ function ProjectDetail() {
       await supabase.from("projects").update({ progress: newProgress }).eq("id", projectId);
     }
     toast.success("Update posted.");
-    (e.target as HTMLFormElement).reset();
+    form.reset();
     setProgressVal(null);
     queryClient.invalidateQueries({ queryKey: ["updates", projectId] });
     queryClient.invalidateQueries({ queryKey: ["project", projectId] });
@@ -121,12 +139,8 @@ function ProjectDetail() {
     const { error: upErr } = await supabase.storage.from("project-documents").upload(path, file);
     if (upErr) { toast.error(upErr.message); return; }
     const { error } = await supabase.from("documents").insert({
-      project_id: projectId,
-      uploader_id: user.id,
-      file_name: file.name,
-      storage_path: path,
-      mime_type: file.type,
-      size_bytes: file.size,
+      project_id: projectId, uploader_id: user.id, file_name: file.name,
+      storage_path: path, mime_type: file.type, size_bytes: file.size,
     });
     if (error) { toast.error(error.message); return; }
     toast.success("Document uploaded.");
@@ -138,9 +152,36 @@ function ProjectDetail() {
     const { data, error } = await supabase.storage.from("project-documents").createSignedUrl(path, 60);
     if (error || !data) { toast.error("Could not get download link"); return; }
     const a = document.createElement("a");
-    a.href = data.signedUrl;
-    a.download = name;
-    a.click();
+    a.href = data.signedUrl; a.download = name; a.click();
+  };
+
+  const handleAddPhase = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const parsed = phaseSchema.safeParse({ name: fd.get("name"), description: fd.get("description") });
+    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
+    const nextIndex = (phases?.length ?? 0);
+    const { error } = await supabase.from("project_phases").insert({
+      project_id: projectId, name: parsed.data.name, description: parsed.data.description || null, order_index: nextIndex,
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Phase added.");
+    form.reset();
+    queryClient.invalidateQueries({ queryKey: ["phases", projectId] });
+  };
+
+  const updatePhase = async (id: string, patch: { status?: string; progress?: number }) => {
+    const { error } = await supabase.from("project_phases").update(patch).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    queryClient.invalidateQueries({ queryKey: ["phases", projectId] });
+  };
+
+  const deletePhase = async (id: string) => {
+    if (!confirm("Delete this phase?")) return;
+    const { error } = await supabase.from("project_phases").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    queryClient.invalidateQueries({ queryKey: ["phases", projectId] });
   };
 
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
@@ -185,7 +226,8 @@ function ProjectDetail() {
 
       <Tabs defaultValue="updates" className="mt-8">
         <TabsList>
-          <TabsTrigger value="updates">Progress updates</TabsTrigger>
+          <TabsTrigger value="updates">Updates</TabsTrigger>
+          <TabsTrigger value="phases">Phases ({phases?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="documents">Documents ({documents?.length ?? 0})</TabsTrigger>
         </TabsList>
 
@@ -209,23 +251,59 @@ function ProjectDetail() {
           {!updates?.length ? (
             <p className="text-sm text-muted-foreground">No updates yet.</p>
           ) : updates.map((u) => (
-            <article key={u.id} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{u.title}</h3>
-                <span className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleString()}</span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">by {(u.author as { full_name?: string } | null)?.full_name || "Team"}{u.progress_percent != null && ` • progress ${u.progress_percent}%`}</p>
-              {u.description && <p className="mt-3 whitespace-pre-wrap text-sm">{u.description}</p>}
-              {u.photo_urls?.length ? (
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                  {u.photo_urls.map((url: string) => (
-                    <a key={url} href={url} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-md border border-border">
-                      <img src={url} alt="progress photo" className="h-full w-full object-cover transition hover:scale-105" loading="lazy" />
-                    </a>
-                  ))}
+            <UpdateCard key={u.id} update={u} canComment={!!canComment} userId={user?.id} />
+          ))}
+        </TabsContent>
+
+        <TabsContent value="phases" className="mt-5 space-y-4">
+          {canEdit && (
+            <form onSubmit={handleAddPhase} className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4">
+              <div className="flex-1 min-w-[200px]"><Label htmlFor="ph-name">Phase name</Label><Input id="ph-name" name="name" required maxLength={120} className="mt-1.5" placeholder="e.g. Foundation" /></div>
+              <div className="flex-[2] min-w-[240px]"><Label htmlFor="ph-desc">Description</Label><Input id="ph-desc" name="description" maxLength={1000} className="mt-1.5" /></div>
+              <Button type="submit"><Plus className="mr-1 h-4 w-4" />Add phase</Button>
+            </form>
+          )}
+          {!phases?.length ? (
+            <p className="text-sm text-muted-foreground">No phases defined yet.</p>
+          ) : phases.map((ph, idx) => (
+            <div key={ph.id} className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
+                    <h3 className="font-semibold">{ph.name}</h3>
+                  </div>
+                  {ph.description && <p className="mt-1 text-sm text-muted-foreground">{ph.description}</p>}
                 </div>
-              ) : null}
-            </article>
+                <div className="flex items-center gap-2">
+                  {canEdit ? (
+                    <>
+                      <Select value={ph.status} onValueChange={(v) => updatePhase(ph.id, { status: v })}>
+                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="in_progress">In progress</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="blocked">Blocked</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button size="icon" variant="ghost" onClick={() => deletePhase(ph.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    </>
+                  ) : (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs uppercase">{ph.status.replace("_", " ")}</span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="mb-1 flex justify-between text-xs"><span className="text-muted-foreground">Phase progress</span><span className="font-semibold">{ph.progress}%</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full bg-gradient-amber" style={{ width: `${ph.progress}%` }} />
+                </div>
+                {canEdit && (
+                  <Slider className="mt-3" value={[ph.progress]} max={100} step={5} onValueChange={(v) => updatePhase(ph.id, { progress: v[0] })} />
+                )}
+              </div>
+            </div>
           ))}
         </TabsContent>
 
@@ -258,5 +336,112 @@ function ProjectDetail() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+type UpdateRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  progress_percent: number | null;
+  photo_urls: string[] | null;
+  created_at: string;
+  author: { full_name?: string } | null;
+};
+
+function UpdateCard({ update, canComment, userId }: { update: UpdateRow; canComment: boolean; userId?: string }) {
+  const queryClient = useQueryClient();
+  const [showComments, setShowComments] = useState(false);
+
+  const { data: comments } = useQuery({
+    queryKey: ["comments", update.id],
+    enabled: showComments,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("progress_comments")
+        .select("*")
+        .eq("update_id", update.id)
+        .order("created_at");
+      if (error) throw error;
+      const ids = Array.from(new Set(data.map((c) => c.author_id)));
+      const { data: profs } = ids.length
+        ? await supabase.from("profiles").select("id, full_name").in("id", ids)
+        : { data: [] as { id: string; full_name: string }[] };
+      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name]));
+      return data.map((c) => ({ ...c, author_name: nameById.get(c.author_id) ?? "User" }));
+    },
+  });
+
+  const submitComment = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const body = String(new FormData(form).get("body") || "").trim();
+    if (!body || !userId) return;
+    const { error } = await supabase.from("progress_comments").insert({
+      update_id: update.id, author_id: userId, body,
+    });
+    if (error) { toast.error(error.message); return; }
+    form.reset();
+    queryClient.invalidateQueries({ queryKey: ["comments", update.id] });
+  };
+
+  const deleteComment = async (id: string) => {
+    const { error } = await supabase.from("progress_comments").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    queryClient.invalidateQueries({ queryKey: ["comments", update.id] });
+  };
+
+  return (
+    <article className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">{update.title}</h3>
+        <span className="text-xs text-muted-foreground">{new Date(update.created_at).toLocaleString()}</span>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">by {update.author?.full_name || "Team"}{update.progress_percent != null && ` • progress ${update.progress_percent}%`}</p>
+      {update.description && <p className="mt-3 whitespace-pre-wrap text-sm">{update.description}</p>}
+      {update.photo_urls?.length ? (
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          {update.photo_urls.map((url) => (
+            <a key={url} href={url} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-md border border-border">
+              <img src={url} alt="progress photo" className="h-full w-full object-cover transition hover:scale-105" loading="lazy" />
+            </a>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-4 border-t border-border pt-3">
+        <Button variant="ghost" size="sm" onClick={() => setShowComments((s) => !s)} className="-ml-2 text-muted-foreground">
+          <MessageSquare className="mr-1.5 h-4 w-4" />
+          {showComments ? "Hide comments" : "Comments"}
+        </Button>
+
+        {showComments && (
+          <div className="mt-3 space-y-3">
+            {comments?.map((c) => (
+              <div key={c.id} className="rounded-lg bg-muted/40 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{c.author_name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString()}</span>
+                    {c.author_id === userId && (
+                      <button onClick={() => deleteComment(c.id)} className="text-xs text-destructive hover:underline">delete</button>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap">{c.body}</p>
+              </div>
+            ))}
+            {!comments?.length && <p className="text-xs text-muted-foreground">No comments yet.</p>}
+
+            {canComment && (
+              <form onSubmit={submitComment} className="flex gap-2">
+                <Input name="body" placeholder="Write a comment…" required maxLength={2000} />
+                <Button type="submit" size="sm">Post</Button>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }

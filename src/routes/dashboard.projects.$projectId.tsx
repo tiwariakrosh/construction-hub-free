@@ -49,11 +49,16 @@ function ProjectDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("progress_updates")
-        .select("*, author:profiles!progress_updates_author_id_fkey(full_name)")
+        .select("*")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      const ids = Array.from(new Set(data.map((u) => u.author_id)));
+      const { data: profs } = ids.length
+        ? await supabase.from("profiles").select("id, full_name").in("id", ids)
+        : { data: [] as { id: string; full_name: string }[] };
+      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name]));
+      return data.map((u) => ({ ...u, author: { full_name: nameById.get(u.author_id) ?? "Team" } }));
     },
   });
 

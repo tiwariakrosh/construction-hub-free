@@ -359,11 +359,16 @@ function UpdateCard({ update, canComment, userId }: { update: UpdateRow; canComm
     queryFn: async () => {
       const { data, error } = await supabase
         .from("progress_comments")
-        .select("*, author:profiles!progress_comments_author_id_fkey(full_name)")
+        .select("*")
         .eq("update_id", update.id)
         .order("created_at");
       if (error) throw error;
-      return data;
+      const ids = Array.from(new Set(data.map((c) => c.author_id)));
+      const { data: profs } = ids.length
+        ? await supabase.from("profiles").select("id, full_name").in("id", ids)
+        : { data: [] as { id: string; full_name: string }[] };
+      const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name]));
+      return data.map((c) => ({ ...c, author_name: nameById.get(c.author_id) ?? "User" }));
     },
   });
 

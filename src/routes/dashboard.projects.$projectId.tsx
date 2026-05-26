@@ -420,7 +420,7 @@ function UpdateCard({ update, canComment, userId }: { update: UpdateRow; canComm
             {comments?.map((c) => (
               <div key={c.id} className="rounded-lg bg-muted/40 p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">{(c.author as { full_name?: string } | null)?.full_name || "User"}</span>
+                  <span className="font-medium">{c.author_name}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString()}</span>
                     {c.author_id === userId && (

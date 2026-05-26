@@ -115,6 +115,38 @@ export type Database = {
         }
         Relationships: []
       }
+      progress_comments: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          update_id: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          update_id: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          update_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "progress_comments_update_id_fkey"
+            columns: ["update_id"]
+            isOneToOne: false
+            referencedRelation: "progress_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       progress_updates: {
         Row: {
           author_id: string
@@ -155,6 +187,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      project_phases: {
+        Row: {
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          name: string
+          order_index: number
+          progress: number
+          project_id: string
+          start_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          order_index?: number
+          progress?: number
+          project_id: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          order_index?: number
+          progress?: number
+          project_id?: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       projects: {
         Row: {

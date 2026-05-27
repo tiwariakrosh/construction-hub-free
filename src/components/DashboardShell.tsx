@@ -1,6 +1,6 @@
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth-context";
-import { HardHat, LayoutDashboard, FolderKanban, MessageSquare, Users, LogOut, Home } from "lucide-react";
+import { HardHat, LayoutDashboard, FolderKanban, MessageSquare, Users, LogOut, Home, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function DashboardShell() {
@@ -10,6 +10,7 @@ export function DashboardShell() {
   const nav = [
     { to: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
     { to: "/dashboard/projects", label: "Projects", icon: FolderKanban },
+    { to: "/dashboard/permissions", label: "Permissions test", icon: ShieldCheck },
     ...(role === "admin"
       ? [
           { to: "/dashboard/inquiries", label: "Inquiries", icon: MessageSquare },

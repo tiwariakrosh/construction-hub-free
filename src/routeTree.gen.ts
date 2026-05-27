@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardUsersRouteImport } from './routes/dashboard.users'
 import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
+import { Route as DashboardPermissionsRouteImport } from './routes/dashboard.permissions'
 import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
 import { Route as DashboardProjectsProjectIdRouteImport } from './routes/dashboard.projects.$projectId'
 
@@ -72,6 +73,11 @@ const DashboardProjectsRoute = DashboardProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardPermissionsRoute = DashboardPermissionsRouteImport.update({
+  id: '/permissions',
+  path: '/permissions',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardInquiriesRoute = DashboardInquiriesRouteImport.update({
   id: '/inquiries',
   path: '/inquiries',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/projects': typeof ProjectsRoute
   '/services': typeof ServicesRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
+  '/dashboard/permissions': typeof DashboardPermissionsRoute
   '/dashboard/projects': typeof DashboardProjectsRouteWithChildren
   '/dashboard/users': typeof DashboardUsersRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/projects': typeof ProjectsRoute
   '/services': typeof ServicesRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
+  '/dashboard/permissions': typeof DashboardPermissionsRoute
   '/dashboard/projects': typeof DashboardProjectsRouteWithChildren
   '/dashboard/users': typeof DashboardUsersRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/projects': typeof ProjectsRoute
   '/services': typeof ServicesRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
+  '/dashboard/permissions': typeof DashboardPermissionsRoute
   '/dashboard/projects': typeof DashboardProjectsRouteWithChildren
   '/dashboard/users': typeof DashboardUsersRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/services'
     | '/dashboard/inquiries'
+    | '/dashboard/permissions'
     | '/dashboard/projects'
     | '/dashboard/users'
     | '/dashboard/'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/services'
     | '/dashboard/inquiries'
+    | '/dashboard/permissions'
     | '/dashboard/projects'
     | '/dashboard/users'
     | '/dashboard'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/projects'
     | '/services'
     | '/dashboard/inquiries'
+    | '/dashboard/permissions'
     | '/dashboard/projects'
     | '/dashboard/users'
     | '/dashboard/'
@@ -252,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/permissions': {
+      id: '/dashboard/permissions'
+      path: '/permissions'
+      fullPath: '/dashboard/permissions'
+      preLoaderRoute: typeof DashboardPermissionsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/inquiries': {
       id: '/dashboard/inquiries'
       path: '/inquiries'
@@ -282,6 +301,7 @@ const DashboardProjectsRouteWithChildren =
 
 interface DashboardRouteChildren {
   DashboardInquiriesRoute: typeof DashboardInquiriesRoute
+  DashboardPermissionsRoute: typeof DashboardPermissionsRoute
   DashboardProjectsRoute: typeof DashboardProjectsRouteWithChildren
   DashboardUsersRoute: typeof DashboardUsersRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -289,6 +309,7 @@ interface DashboardRouteChildren {
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardInquiriesRoute: DashboardInquiriesRoute,
+  DashboardPermissionsRoute: DashboardPermissionsRoute,
   DashboardProjectsRoute: DashboardProjectsRouteWithChildren,
   DashboardUsersRoute: DashboardUsersRoute,
   DashboardIndexRoute: DashboardIndexRoute,
@@ -310,13 +331,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
